@@ -1,78 +1,52 @@
+# Load necessary libraries (must be installed in your GitHub Action workflow)
 library(wehoop)
 library(dplyr)
 library(readr)
-library(purrr)
+library(stringr)
 
-# Create data directory if it doesn't exist
-if (!dir.exists("data")) {
-  dir.create("data")
+# --- Configuration ---
+TEAM_NAME <- "Arkansas"
+NCAA_SEASONS <- c(2025, 2026)
+WNBA_SEASONS <- c(2025) # Keeping WNBA refresh for completeness
+
+# --- WNBA Data Refresh ---
+cat("Refreshing WNBA PBP data...\n")
+for (season in WNBA_SEASONS) {
+  wnba_pbp <- load_wnba_pbp(season)
+  filename <- sprintf("data/wnba_pbp_%d.csv.gz", season)
+  write_csv(wnba_pbp, filename, compress = 'gzip')
+  cat(sprintf("Saved WNBA PBP data for %d to %s\n", season, filename))
 }
 
-# --- CONFIGURATION ---
-wnba_season <- 2025
-ncaa_seasons <- c(2025, 2026) # 2025 is the 2024-25 season, 2026 is the 2025-26 season
 
-# --- FUNCTION TO SAFE LOAD ---
-# Wrapper to handle potential timeout/connection issues gracefully
-safe_load_wnba <- function(y) {
-  tryCatch(
-    {
-      message(paste("Loading WNBA PBP for season:", y))
-      load_wnba_pbp(seasons = y)
-    },
-    error = function(e) {
-      message(paste("Error loading WNBA:", e))
-      return(NULL)
-    }
-  )
+# --- NCAA WBB Data Refresh and Filtering ---
+for (season in NCAA_SEASONS) {
+  cat(sprintf("\nProcessing NCAA WBB data for season: %d\n", season))
+
+  # 1. Fetch the full PBP data from wehoop
+  full_pbp_data <- load_wbb_pbp(season)
+
+  # 2. Save the full PBP file (to keep the master file)
+  full_output_filename <- sprintf("data/ncaa_wbb_pbp_%d.csv.gz", season)
+  cat(sprintf("Saving full PBP data (%d rows) to: %s\n", nrow(full_pbp_data), full_output_filename))
+  write_csv(full_pbp_data, full_output_filename, compress = 'gzip')
+
+  # 3. Filter for Arkansas games
+  # Identify all unique game IDs that involve Arkansas (as team or opponent)
+  arkansas_game_ids <- full_pbp_data %>%
+    filter(team_name == TEAM_NAME | opponent_name == TEAM_NAME) %>%
+    pull(game_id) %>%
+    unique()
+
+  # Filter the PBP data to include only those games
+  arkansas_pbp_data <- full_pbp_data %>%
+    filter(game_id %in% arkansas_game_ids)
+
+  # 4. Save the Arkansas-specific data to a new compressed file
+  arkansas_output_filename <- sprintf("data/arkansas_wbb_%d.csv.gz", season)
+  cat(sprintf("Saving filtered Arkansas data (%d rows) to: %s\n", 
+              nrow(arkansas_pbp_data), arkansas_output_filename))
+  write_csv(arkansas_pbp_data, arkansas_output_filename, compress = 'gzip')
 }
 
-safe_load_ncaa <- function(y) {
-  tryCatch(
-    {
-      message(paste("Loading NCAA PBP for season:", y))
-      load_wbb_pbp(seasons = y)
-    },
-    error = function(e) {
-      message(paste("Error loading NCAA:", e))
-      return(NULL)
-    }
-  )
-}
-
-# --- FETCH WNBA DATA ---
-# WNBA data is smaller, so we can save it as a standard CSV if desired,
-# but we will use .csv.gz for consistency and speed.
-wnba_data <- safe_load_wnba(wnba_season)
-
-if (!is.null(wnba_data) && nrow(wnba_data) > 0) {
-  file_name <- paste0("data/wnba_pbp_", wnba_season, ".csv.gz")
-  message(paste("Writing WNBA data to", file_name, "Rows:", nrow(wnba_data)))
-  write_csv(wnba_data, file_name)
-} else {
-  message("No WNBA data found or error occurred.")
-}
-
-# --- FETCH NCAA DATA ---
-# NCAA data is HUGE. We must iterate and save separately to avoid memory crash
-# and to keep file sizes manageable for GitHub (<100MB).
-for (season in ncaa_seasons) {
-  ncaa_data <- safe_load_ncaa(season)
-  
-  if (!is.null(ncaa_data) && nrow(ncaa_data) > 0) {
-    file_name <- paste0("data/ncaa_wbb_pbp_", season, ".csv.gz")
-    message(paste("Writing NCAA data to", file_name, "Rows:", nrow(ncaa_data)))
-    
-    # Selecting columns to reduce size slightly if needed, but keeping all for now.
-    # We write to a compressed CSV to stay under GitHub's 100MB limit.
-    write_csv(ncaa_data, file_name)
-    
-    # Garbage collection to free up memory before next load
-    rm(ncaa_data)
-    gc()
-  } else {
-    message(paste("No NCAA data found for season", season))
-  }
-}
-
-message("Data update complete.")
+cat("\nAll data processing and filtering complete. Arkansas-specific files are ready.\n")
