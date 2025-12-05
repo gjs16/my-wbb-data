@@ -7,14 +7,15 @@ library(stringr)
 # --- Configuration ---
 TEAM_NAME <- "Arkansas"
 NCAA_SEASONS <- c(2025, 2026)
-WNBA_SEASONS <- c(2025) # Keeping WNBA refresh for completeness
+WNBA_SEASONS <- c(2025)
 
 # --- WNBA Data Refresh ---
 cat("Refreshing WNBA PBP data...\n")
 for (season in WNBA_SEASONS) {
   wnba_pbp <- load_wnba_pbp(season)
   filename <- sprintf("data/wnba_pbp_%d.csv.gz", season)
-  write_csv(wnba_pbp, filename, compress = 'gzip')
+  # FIX: Removed compress = 'gzip' argument
+  write_csv(wnba_pbp, filename) 
   cat(sprintf("Saved WNBA PBP data for %d to %s\n", season, filename))
 }
 
@@ -29,7 +30,8 @@ for (season in NCAA_SEASONS) {
   # 2. Save the full PBP file (to keep the master file)
   full_output_filename <- sprintf("data/ncaa_wbb_pbp_%d.csv.gz", season)
   cat(sprintf("Saving full PBP data (%d rows) to: %s\n", nrow(full_pbp_data), full_output_filename))
-  write_csv(full_pbp_data, full_output_filename, compress = 'gzip')
+  # FIX: Removed compress = 'gzip' argument
+  write_csv(full_pbp_data, full_output_filename) 
 
   # 3. Filter for Arkansas games
   # Identify all unique game IDs that involve Arkansas (as team or opponent)
@@ -46,7 +48,8 @@ for (season in NCAA_SEASONS) {
   arkansas_output_filename <- sprintf("data/arkansas_wbb_%d.csv.gz", season)
   cat(sprintf("Saving filtered Arkansas data (%d rows) to: %s\n", 
               nrow(arkansas_pbp_data), arkansas_output_filename))
-  write_csv(arkansas_pbp_data, arkansas_output_filename, compress = 'gzip')
+  # FIX: Removed compress = 'gzip' argument
+  write_csv(arkansas_pbp_data, arkansas_output_filename) 
 }
 
 cat("\nAll data processing and filtering complete. Arkansas-specific files are ready.\n")
