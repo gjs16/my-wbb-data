@@ -21,25 +21,29 @@ for (season in AGGREGATE_SEASONS) {
   cat(sprintf("\nRefreshing National Season Aggregate Stats for season: %d\n", season))
   
   # Pull 3a: Team Aggregate Stats (Season Averages/Totals)
-  team_stats <- espn_wbb_team_stats(season)
+  # FIX: Changed espn_wbb_team_stats(season) to espn_wbb_team_stats(year = season)
+  team_stats <- espn_wbb_team_stats(year = season) 
   team_stats_filename <- sprintf("data/national_wbb_team_stats_%d.csv.gz", season)
   write_csv(team_stats, team_stats_filename)
   cat(sprintf("Saved National Team Stats (%d rows) to: %s\n", nrow(team_stats), team_stats_filename))
 
   # Pull 3b: Player Aggregate Stats (Season Averages/Totals)
-  player_stats <- espn_wbb_player_stats(season)
+  # FIX: Changed espn_wbb_player_stats(season) to espn_wbb_player_stats(year = season)
+  player_stats <- espn_wbb_player_stats(year = season)
   player_stats_filename <- sprintf("data/national_wbb_player_stats_%d.csv.gz", season)
   write_csv(player_stats, player_stats_filename)
   cat(sprintf("Saved National Player Stats (%d rows) to: %s\n", nrow(player_stats), player_stats_filename))
 
   # Pull 3c: Game Rosters (Static Roster Information)
-  rosters <- espn_wbb_game_rosters(season)
+  # FIX: Changed espn_wbb_game_rosters(season) to espn_wbb_game_rosters(year = season)
+  rosters <- espn_wbb_game_rosters(year = season)
   rosters_filename <- sprintf("data/national_wbb_rosters_%d.csv.gz", season)
   write_csv(rosters, rosters_filename)
   cat(sprintf("Saved National Roster Data (%d rows) to: %s\n", nrow(rosters), rosters_filename))
 }
 
 # 4. Existing: Game Box Scores and Schedule/Results (Renumbered from old script)
+# These functions typically use 'season' as the argument name, so no change is needed here.
 for (season in AGGREGATE_SEASONS) {
   cat(sprintf("\nRefreshing National Game Stats for season: %d\n", season))
   
@@ -53,13 +57,4 @@ for (season in AGGREGATE_SEASONS) {
   player_box <- load_wbb_player_box(season)
   player_filename <- sprintf("data/national_wbb_player_box_%d.csv.gz", season)
   write_csv(player_box, player_filename)
-  cat(sprintf("Saved National Player Box Score (%d rows) to: %s\n", nrow(player_box), player_filename))
-  
-  # Pull 4c: Game Schedules/Results (Individual Game Summary)
-  schedule_data <- load_wbb_schedule(season)
-  schedule_filename <- sprintf("data/national_wbb_schedule_%d.csv.gz", season)
-  write_csv(schedule_data, schedule_filename)
-  cat(sprintf("Saved National Schedule/Results (%d rows) to: %s\n", nrow(schedule_data), schedule_filename))
-}
-
-cat("\nAll data processing and filtering complete. All files are ready for Gemini integration.\n")
+  cat(sprintf("Saved National Player Box Score (%d rows) to: %s\n", nrow(player_box), player_filename
