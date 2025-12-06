@@ -50,3 +50,35 @@ To analyze this data in an LLM, you need the **Raw Link** for the specific file.
 3.  Click **"I understand my workflows, go ahead and enable them"**.
 4.  Select the **Daily Data Refresh** workflow on the left.
 5.  Click **Run workflow** to trigger the first data pull immediately.
+
+
+----
+
+Arkansas Play-by-Play Data
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/arkansas_wbb_pbp_2025.csv.gz
+
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/arkansas_wbb_pbp_2026.csv.gz
+
+National Player Box Scores (by-game stats)
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_player_box_2024.csv.gz
+
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_player_box_2025.csv.gz
+
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_player_box_2026.csv.gz
+
+National Schedule/Results
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_schedule_2024.csv.gz
+
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_schedule_2025.csv.gz
+
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_schedule_2026.csv.gz
+
+National Team Box Scores (by-game stats)
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_team_box_2024.csv.gz
+
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_team_box_2025.csv.gz
+
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/national_wbb_team_box_2026.csv.gz
+
+National Play-by-Play Data
+https://raw.githubusercontent.com/gjs16/my-wbb-data/main/data/ncaa_wbb_pbp_2026.csv.gz
