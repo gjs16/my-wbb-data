@@ -8,16 +8,18 @@ library(stringr)
 TEAM_NAME_FILTER <- "Arkansas" 
 PBP_SEASONS <- c(2025, 2026) # PBP for current/prior season
 AGGREGATE_SEASONS <- c(2024, 2025, 2026) # Aggregated stats for past three seasons
-WNBA_SEASONS <- c(2025)
+# WNBA_SEASONS <- c(2025) # REMOVED: WNBA PBP removed to comply with 100MB limit
+
 
 # --- WNBA Data Refresh (PBP) ---
-cat("Refreshing WNBA PBP data...\n")
-for (season in WNBA_SEASONS) {
-  wnba_pbp <- load_wnba_pbp(season)
-  filename <- sprintf("data/wnba_pbp_%d.csv.gz", season)
-  write_csv(wnba_pbp, filename) 
-  cat(sprintf("Saved WNBA PBP data for %d to %s\n", season, filename))
-}
+# This section is now skipped to keep the repository small for Gemini integration.
+# cat("Refreshing WNBA PBP data...\n")
+# for (season in WNBA_SEASONS) {
+#   wnba_pbp <- load_wnba_pbp(season)
+#   filename <- sprintf("data/wnba_pbp_%d.csv.gz", season)
+#   write_csv(wnba_pbp, filename) 
+#   cat(sprintf("Saved WNBA PBP data for %d to %s\n", season, filename))
+# }
 
 
 # --- NCAA WBB DATA PULLS ---
@@ -29,7 +31,8 @@ for (season in PBP_SEASONS) {
   # Fetch the full PBP data from wehoop (Required for filtering)
   full_pbp_data <- load_wbb_pbp(season)
 
-  # FIX: Using 'home_team_name' and 'away_team_name' with str_detect for robust filtering.
+  # 3. Filter for Arkansas games
+  # FINAL FIX: Using 'home_team_name' and 'away_team_name' with str_detect for robust filtering.
   arkansas_game_ids <- full_pbp_data %>%
     filter(str_detect(home_team_name, TEAM_NAME_FILTER) | str_detect(away_team_name, TEAM_NAME_FILTER)) %>%
     pull(game_id) %>%
@@ -39,7 +42,7 @@ for (season in PBP_SEASONS) {
   arkansas_pbp_data <- full_pbp_data %>%
     filter(game_id %in% arkansas_game_ids)
 
-  # Save the Arkansas-specific PBP data (small file)
+  # 4. Save the Arkansas-specific PBP data (small file)
   arkansas_output_filename <- sprintf("data/arkansas_wbb_pbp_%d.csv.gz", season)
   cat(sprintf("Saving filtered Arkansas PBP data (%d rows) to: %s\n", 
               nrow(arkansas_pbp_data), arkansas_output_filename))
