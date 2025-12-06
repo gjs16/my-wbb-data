@@ -31,12 +31,23 @@ for (season in NCAA_SEASONS) {
   cat(sprintf("Saving full PBP data (%d rows) to: %s\n", nrow(full_pbp_data), full_output_filename))
   write_csv(full_pbp_data, full_output_filename) 
 
-  # 3. Filter for Arkansas games
-  # FIX: Previous attempts (team_name, home_team, home_team_name) all failed.
-  # Now using 'home_school_name' and 'away_school_name', which are highly reliable team name columns
-  # in ESPN data scrapes when the simpler names are missing.
+  # ----------------------------------------------------------------------
+  # !!! DEBUG STEP: We will print the column names to see the correct team fields.
+  # Please copy the output of this line in the next step!
+  # ----------------------------------------------------------------------
+  
+  cat("\n--- START DEBUG OUTPUT: COLUMN NAMES ---\n")
+  print(colnames(full_pbp_data))
+  cat("--- END DEBUG OUTPUT ---\n")
+  
+  # Halt execution before attempting the filter, so we get the names without error
+  stop("DEBUG STOP: Column names successfully printed above. Please provide the output.")
+  
+  # The rest of the original filtering logic is commented out/skipped for this debug run.
+  
+  # 3. Filter for Arkansas games (Will be restored and fixed next turn)
   arkansas_game_ids <- full_pbp_data %>%
-    filter(home_school_name == TEAM_NAME | away_school_name == TEAM_NAME) %>%
+    # filter(home_school_name == TEAM_NAME | away_school_name == TEAM_NAME) %>% # Original faulty filter
     pull(game_id) %>%
     unique()
 
