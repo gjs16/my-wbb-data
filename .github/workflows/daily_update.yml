@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     
     permissions:
-      contents: write  # Grant permission to commit changes
+      contents: write # Grant permission to commit changes
 
     steps:
       - name: Checkout repository
@@ -42,3 +42,5 @@ jobs:
           commit_message: "Automated data refresh: ${{ github.event.head_commit.message }}"
           file_pattern: data/*.csv.gz
           branch: main
+          # FIX: Add the pull strategy to resolve non-fast-forward push errors
+          pull_strategy: rebase
