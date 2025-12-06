@@ -4,43 +4,41 @@ library(dplyr)
 library(readr)
 library(stringr)
 
+# ------------------------------------
 # --- Configuration ---
-TEAM_NAME_FILTER <- "Arkansas" 
-PBP_SEASONS <- c(2025, 2026) # PBP for current/prior season
+# ------------------------------------
+# NEW: Use the precise ESPN Team ID for the University of Arkansas Razorbacks.
+TEAM_ID_FILTER <- 8 
+PBP_SEASONS <- c(2025, 2026) # PBP for current (2026) and prior (2025) season
 AGGREGATE_SEASONS <- c(2024, 2025, 2026) # Aggregated stats for past three seasons
-# WNBA_SEASONS <- c(2025) # REMOVED: WNBA PBP removed to comply with 100MB limit
 
 
 # --- WNBA Data Refresh (PBP) ---
 # This section is now skipped to keep the repository small for Gemini integration.
 # cat("Refreshing WNBA PBP data...\n")
 # for (season in WNBA_SEASONS) {
-#   wnba_pbp <- load_wnba_pbp(season)
-#   filename <- sprintf("data/wnba_pbp_%d.csv.gz", season)
-#   write_csv(wnba_pbp, filename) 
-#   cat(sprintf("Saved WNBA PBP data for %d to %s\n", season, filename))
+#    wnba_pbp <- load_wnba_pbp(season)
+#    filename <- sprintf("data/wnba_pbp_%d.csv.gz", season)
+#    write_csv(wnba_pbp, filename) 
+#    cat(sprintf("Saved WNBA PBP data for %d to %s\n", season, filename))
 # }
 
 
+# ------------------------------------
 # --- NCAA WBB DATA PULLS ---
+# ------------------------------------
 
-# 1. PBP Data Filtering (Arkansas-Specific PBP)
+# 1. PBP Data Filtering (Arkansas Razorbacks-Specific PBP)
 for (season in PBP_SEASONS) {
   cat(sprintf("\nProcessing NCAA WBB PBP data for season: %d\n", season))
 
   # Fetch the full PBP data from wehoop (Required for filtering)
   full_pbp_data <- load_wbb_pbp(season)
 
-  # 3. Filter for Arkansas games
-  # FINAL FIX: Using 'home_team_name' and 'away_team_name' with str_detect for robust filtering.
-  arkansas_game_ids <- full_pbp_data %>%
-    filter(str_detect(home_team_name, TEAM_NAME_FILTER) | str_detect(away_team_name, TEAM_NAME_FILTER)) %>%
-    pull(game_id) %>%
-    unique()
-
-  # Filter the PBP data to include only those games
+  # 3. Filter for University of Arkansas Razorbacks games by Team ID (8)
   arkansas_pbp_data <- full_pbp_data %>%
-    filter(game_id %in% arkansas_game_ids)
+    # Use the team ID fields (home_team_id and away_team_id) for precise filtering
+    filter(home_team_id == TEAM_ID_FILTER | away_team_id == TEAM_ID_FILTER)
 
   # 4. Save the Arkansas-specific PBP data (small file)
   arkansas_output_filename <- sprintf("data/arkansas_wbb_pbp_%d.csv.gz", season)
