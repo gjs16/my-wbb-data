@@ -17,7 +17,7 @@ AGGREGATE_SEASONS <- c(2024, 2025, 2026)
 # The necessary national aggregate data can be derived from the box 
 # score files being loaded below.
 
-# 3. Game Box Scores and Schedule/Results (Renumbered from old script)
+# 3. Game Box Scores and Schedule/Results
 for (season in AGGREGATE_SEASONS) {
   cat(sprintf("\nRefreshing National Game Stats for season: %d\n", season))
   
