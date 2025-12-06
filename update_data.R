@@ -1,43 +1,59 @@
-# Load necessary libraries (must be installed in your GitHub Action workflow)
+# update_data.R (Recommended Replacement)
+
+# 1. Load Required Packages
 library(wehoop)
 library(dplyr)
 library(readr)
-library(stringr)
+library(purrr)
 
-# --- Configuration ---
-# Only keeping Aggregate seasons for consistent small file pulls.
-AGGREGATE_SEASONS <- c(2024, 2025, 2026) 
+# 2. Configuration
+# Seasons to fetch (2024 and 2025 for context, 2026 for current season)
+seasons <- c(2024, 2025, 2026) 
+# Define the output path relative to the script location
+data_path <- "./data/" 
 
-# ------------------------------------
-# --- NCAA WBB DATA PULLS ---
-# ------------------------------------
+# 3. Define Core Data Fetching Function
+# This function handles all three data types for a given season
+fetch_and_write_data <- function(season, data_path) {
+    message(paste("Starting data fetch for season:", season))
 
-# Note: Section 3 (Team and Player Season Aggregate Stats) has been
-# removed because the espn_* functions require a specific 'team_id'.
-# The necessary national aggregate data can be derived from the box 
-# score files being loaded below.
+    # --- Fetch and Write NATIONAL SCHEDULE/RESULTS ---
+    message(paste("Fetching schedule for", season))
+    schedule_data <- load_wbb_schedule(season = season)
+    write_csv(
+        schedule_data, 
+        file = paste0(data_path, "national_wbb_schedule_", season, ".csv.gz")
+    )
 
-# 3. Game Box Scores and Schedule/Results
-for (season in AGGREGATE_SEASONS) {
-  cat(sprintf("\nRefreshing National Game Stats for season: %d\n", season))
-  
-  # Pull 3a: Team Box Scores (by-game stats)
-  team_box <- load_wbb_team_box(season)
-  team_filename <- sprintf("data/national_wbb_team_box_%d.csv.gz", season)
-  write_csv(team_box, team_filename)
-  cat(sprintf("Saved National Team Box Score (%d rows) to: %s\n", nrow(team_box), team_filename))
-  
-  # Pull 3b: Player Box Scores (by-game stats)
-  player_box <- load_wbb_player_box(season)
-  player_filename <- sprintf("data/national_wbb_player_box_%d.csv.gz", season)
-  write_csv(player_box, player_filename)
-  cat(sprintf("Saved National Player Box Score (%d rows) to: %s\n", nrow(player_box), player_filename))
-  
-  # Pull 3c: Game Schedules/Results (Individual Game Summary)
-  schedule_data <- load_wbb_schedule(season)
-  schedule_filename <- sprintf("data/national_wbb_schedule_%d.csv.gz", season)
-  write_csv(schedule_data, schedule_filename)
-  cat(sprintf("Saved National Schedule/Results (%d rows) to: %s\n", nrow(schedule_data), schedule_filename))
+    # --- Fetch and Write NATIONAL TEAM BOX SCORES ---
+    # This is the PRIMARY source for W/L record and team metrics (PPG, FG%, etc.)
+    message(paste("Fetching team box scores for", season))
+    team_box_data <- load_wbb_team_box(season = season)
+    write_csv(
+        team_box_data, 
+        file = paste0(data_path, "national_wbb_team_box_", season, ".csv.gz")
+    )
+
+    # --- Fetch and Write NATIONAL PLAYER BOX SCORES ---
+    # This is the PRIMARY source for player stats (scoring leaders, minutes)
+    message(paste("Fetching player box scores for", season))
+    player_box_data <- load_wbb_player_box(season = season)
+    write_csv(
+        player_box_data, 
+        file = paste0(data_path, "national_wbb_player_box_", season, ".csv.gz")
+    )
+    
+    # Optional: Clean up memory after large fetches
+    rm(schedule_data, team_box_data, player_box_data)
+    gc()
+    message(paste("Finished data fetch for season:", season))
 }
 
-cat("\nAll data processing and filtering complete. All files are ready for Gemini integration.\n")
+# 4. Execute the update for all seasons
+walk(seasons, fetch_and_write_data, data_path = data_path)
+
+# 5. BONUS: Add Arkansas-Specific File for Faster Querying
+# While not strictly necessary, having one small file for Arkansas's current season can speed up analysis.
+ark_pbox <- load_wbb_player_box(season = 2026) %>% 
+    filter(team_name == "Arkansas")
+write_csv(ark_pbox, file = paste0(data_path, "arkansas_wbb_player_box_2026.csv.gz"))
