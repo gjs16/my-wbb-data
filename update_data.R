@@ -8,28 +8,13 @@ library(stringr)
 # Only keeping Aggregate seasons for consistent small file pulls.
 AGGREGATE_SEASONS <- c(2024, 2025, 2026) 
 
-
 # ------------------------------------
 # --- NCAA WBB DATA PULLS ---
 # ------------------------------------
 
-# 1. New: NET Rankings (Current-season/date rankings)
-cat(sprintf("\nRefreshing National NET Rankings (current date)...\n"))
-net_rankings <- ncaa_wbb_NET_rankings()
-net_filename <- "data/national_wbb_net_rankings_current.csv.gz"
-write_csv(net_rankings, net_filename)
-cat(sprintf("Saved National NET Rankings (%d rows) to: %s\n", nrow(net_rankings), net_filename))
-
-
-# 2. New: AP and Coaches Poll Rankings (Season-by-season polls)
-for (season in AGGREGATE_SEASONS) {
-  cat(sprintf("\nRefreshing National AP/Coaches Poll Rankings for season: %d\n", season))
-  rankings <- espn_wbb_rankings(season)
-  rankings_filename <- sprintf("data/national_wbb_rankings_%d.csv.gz", season)
-  write_csv(rankings, rankings_filename)
-  cat(sprintf("Saved National Poll Rankings (%d rows) to: %s\n", nrow(rankings), rankings_filename))
-}
-
+# Note: NET Rankings (1) and AP/Coaches Poll Rankings (2) have been removed 
+# as they pull current data, which conflicts with the historical/aggregate 
+# nature of the remaining data pulls.
 
 # 3. New: Team and Player Season Aggregate Stats
 for (season in AGGREGATE_SEASONS) {
@@ -53,7 +38,6 @@ for (season in AGGREGATE_SEASONS) {
   write_csv(rosters, rosters_filename)
   cat(sprintf("Saved National Roster Data (%d rows) to: %s\n", nrow(rosters), rosters_filename))
 }
-
 
 # 4. Existing: Game Box Scores and Schedule/Results (Renumbered from old script)
 for (season in AGGREGATE_SEASONS) {
