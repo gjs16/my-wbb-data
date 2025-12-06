@@ -4,66 +4,74 @@ library(dplyr)
 library(readr)
 library(stringr)
 
-# ------------------------------------
 # --- Configuration ---
-# ------------------------------------
-# The precise ESPN Team ID for the University of Arkansas Razorbacks (Fayetteville)
-TEAM_ID_FILTER <- 8 
-PBP_SEASONS <- c(2025, 2026) # PBP for current (2026) and prior (2025) season
-AGGREGATE_SEASONS <- c(2024, 2025, 2026) # Aggregated stats for past three seasons
-
-
-# --- WNBA Data Refresh (PBP) ---
-# This section is now skipped to keep the repository small for Gemini integration.
-# cat("Refreshing WNBA PBP data...\n")
-# for (season in WNBA_SEASONS) {
-#    wnba_pbp <- load_wnba_pbp(season)
-#    filename <- sprintf("data/wnba_pbp_%d.csv.gz", season)
-#    write_csv(wnba_pbp, filename) 
-#    cat(sprintf("Saved WNBA PBP data for %d to %s\n", season, filename))
-# }
+# Only keeping Aggregate seasons for consistent small file pulls.
+AGGREGATE_SEASONS <- c(2024, 2025, 2026) 
 
 
 # ------------------------------------
 # --- NCAA WBB DATA PULLS ---
 # ------------------------------------
 
-# 1. PBP Data Filtering (Arkansas Razorbacks-Specific PBP)
-for (season in PBP_SEASONS) {
-  cat(sprintf("\nProcessing NCAA WBB PBP data for season: %d\n", season))
+# 1. New: NET Rankings (Current-season/date rankings)
+cat(sprintf("\nRefreshing National NET Rankings (current date)...\n"))
+net_rankings <- ncaa_wbb_NET_rankings()
+net_filename <- "data/national_wbb_net_rankings_current.csv.gz"
+write_csv(net_rankings, net_filename)
+cat(sprintf("Saved National NET Rankings (%d rows) to: %s\n", nrow(net_rankings), net_filename))
 
-  # Fetch the full PBP data from wehoop (Required for filtering)
-  full_pbp_data <- load_wbb_pbp(season)
 
-  # 3. Filter for University of Arkansas Razorbacks games by Team ID (8)
-  arkansas_pbp_data <- full_pbp_data %>%
-    # Use the team ID fields (home_team_id and away_team_id) for precise filtering
-    filter(home_team_id == TEAM_ID_FILTER | away_team_id == TEAM_ID_FILTER)
-
-  # 4. Save the Arkansas-specific PBP data (small file)
-  arkansas_output_filename <- sprintf("data/arkansas_wbb_pbp_%d.csv.gz", season)
-  cat(sprintf("Saving filtered Arkansas PBP data (%d rows) to: %s\n", 
-              nrow(arkansas_pbp_data), arkansas_output_filename))
-  write_csv(arkansas_pbp_data, arkansas_output_filename) 
+# 2. New: AP and Coaches Poll Rankings (Season-by-season polls)
+for (season in AGGREGATE_SEASONS) {
+  cat(sprintf("\nRefreshing National AP/Coaches Poll Rankings for season: %d\n", season))
+  rankings <- espn_wbb_rankings(season)
+  rankings_filename <- sprintf("data/national_wbb_rankings_%d.csv.gz", season)
+  write_csv(rankings, rankings_filename)
+  cat(sprintf("Saved National Poll Rankings (%d rows) to: %s\n", nrow(rankings), rankings_filename))
 }
 
-# 2. National Aggregate Data (NEW REQUEST - Small Files)
+
+# 3. New: Team and Player Season Aggregate Stats
 for (season in AGGREGATE_SEASONS) {
-  cat(sprintf("\nRefreshing National Aggregate Stats for season: %d\n", season))
+  cat(sprintf("\nRefreshing National Season Aggregate Stats for season: %d\n", season))
   
-  # Pull 2a: Team Statistics (Aggregated Box Scores)
+  # Pull 3a: Team Aggregate Stats (Season Averages/Totals)
+  team_stats <- espn_wbb_team_stats(season)
+  team_stats_filename <- sprintf("data/national_wbb_team_stats_%d.csv.gz", season)
+  write_csv(team_stats, team_stats_filename)
+  cat(sprintf("Saved National Team Stats (%d rows) to: %s\n", nrow(team_stats), team_stats_filename))
+
+  # Pull 3b: Player Aggregate Stats (Season Averages/Totals)
+  player_stats <- espn_wbb_player_stats(season)
+  player_stats_filename <- sprintf("data/national_wbb_player_stats_%d.csv.gz", season)
+  write_csv(player_stats, player_stats_filename)
+  cat(sprintf("Saved National Player Stats (%d rows) to: %s\n", nrow(player_stats), player_stats_filename))
+
+  # Pull 3c: Game Rosters (Static Roster Information)
+  rosters <- espn_wbb_game_rosters(season)
+  rosters_filename <- sprintf("data/national_wbb_rosters_%d.csv.gz", season)
+  write_csv(rosters, rosters_filename)
+  cat(sprintf("Saved National Roster Data (%d rows) to: %s\n", nrow(rosters), rosters_filename))
+}
+
+
+# 4. Existing: Game Box Scores and Schedule/Results (Renumbered from old script)
+for (season in AGGREGATE_SEASONS) {
+  cat(sprintf("\nRefreshing National Game Stats for season: %d\n", season))
+  
+  # Pull 4a: Team Box Scores (by-game stats)
   team_box <- load_wbb_team_box(season)
   team_filename <- sprintf("data/national_wbb_team_box_%d.csv.gz", season)
   write_csv(team_box, team_filename)
   cat(sprintf("Saved National Team Box Score (%d rows) to: %s\n", nrow(team_box), team_filename))
   
-  # Pull 2b: Player Statistics (Aggregated Box Scores)
+  # Pull 4b: Player Box Scores (by-game stats)
   player_box <- load_wbb_player_box(season)
   player_filename <- sprintf("data/national_wbb_player_box_%d.csv.gz", season)
   write_csv(player_box, player_filename)
   cat(sprintf("Saved National Player Box Score (%d rows) to: %s\n", nrow(player_box), player_filename))
   
-  # Pull 2c: Game Schedules/Results (Individual Game Summary)
+  # Pull 4c: Game Schedules/Results (Individual Game Summary)
   schedule_data <- load_wbb_schedule(season)
   schedule_filename <- sprintf("data/national_wbb_schedule_%d.csv.gz", season)
   write_csv(schedule_data, schedule_filename)
