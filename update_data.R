@@ -7,7 +7,7 @@ library(stringr)
 # ------------------------------------
 # --- Configuration ---
 # ------------------------------------
-# NEW: Use the precise ESPN Team ID for the University of Arkansas Razorbacks.
+# The precise ESPN Team ID for the University of Arkansas Razorbacks (Fayetteville)
 TEAM_ID_FILTER <- 8 
 PBP_SEASONS <- c(2025, 2026) # PBP for current (2026) and prior (2025) season
 AGGREGATE_SEASONS <- c(2024, 2025, 2026) # Aggregated stats for past three seasons
