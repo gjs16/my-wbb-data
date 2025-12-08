@@ -1,5 +1,5 @@
 # DATA SCHEMA AND CONTEXT FOR 2026 WBB BOX SCORES
-Updated on: 2025-12-07
+Updated on: 2025-12-08
 
 ## General Context
 * **Season:** 2025-2026 (labeled '2026')
