@@ -1,10 +1,12 @@
-# DATA SCHEMA AND CONTEXT FOR 2026 WBB BOX SCORES
-Updated on: 2025-12-08
+# DATA SCHEMA AND CONTEXT FOR WBB BOX SCORES
+Updated on: 2025-12-09
 
 ## General Context
-* **Season:** 2025-2026 (labeled '2026')
+* **Seasons Included:** 2024, 2025, 2026
 * **Primary Team:** Arkansas Razorbacks
 * **Data Source:** wehoop (NCAA functionality)
+* **Google Sheet ID:** 1QNTkUqUm-gXwhqLKoOtj3x8fdw-aV06InXtP4VoGaTI
+* **Google Sheet Tab Name:** llm_data_schema
 
 ## Key Columns Dictionary
 * **team_display_name / team_name:** The school name.
@@ -16,6 +18,8 @@ Updated on: 2025-12-08
 * **field_goal_pct:** FG% (0.0 to 1.0).
 * **three_point_field_goal_pct:** 3PT% (0.0 to 1.0).
 
-## File Guide
-* **arkansas_wbb_player_box_2026.csv:** Use for detailed player stats for Arkansas.
-* **national_wbb_team_box_2026.csv:** Use for schedule results, win/loss records, and opponent comparison.
+## File/Tab Guide
+* **national_wbb_player_box_2026:** Best for current national player analysis.
+* **arkansas_wbb_player_box_2026:** Best for current Arkansas player analysis.
+* **national_wbb_team_box_2026:** Best for schedule results and team comparisons.
+* **Note:** Historic 2024 and 2025 files are available on their own tabs for trending.
