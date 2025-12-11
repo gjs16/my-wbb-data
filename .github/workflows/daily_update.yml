@@ -53,3 +53,5 @@ jobs:
           file_pattern: data/*
           branch: ${{ github.ref_name }}
           pull_strategy: rebase
+          # FIX B: This explicitly provides the token necessary for scheduled jobs to push.
+          token: ${{ secrets.GITHUB_TOKEN }}
