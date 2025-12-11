@@ -10,8 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    # The secrets line must be aligned with 'permissions' (4 spaces from 'update-data:')
-    secrets: inherit 
+    secrets: inherit
 
     steps:
       - name: Checkout repository
