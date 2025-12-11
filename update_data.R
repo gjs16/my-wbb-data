@@ -90,4 +90,58 @@ upload_to_sheets <- function(sheet_id, local_path) {
 
 # 3. Define the Fetch & Write Function (Uncompressed files for all seasons)
 fetch_and_write_data <- function(season, path) {
-  message(paste("---
+  message(paste("--- Fetching data for season:", season, "---"))
+  
+  # Fetch data using wehoop functions
+  wbb_pbp <- wehoop::load_wbb_pbp(season = season)
+  wbb_schedule <- wehoop::espn_wbb_schedule(season = season)
+  wbb_team_box <- wehoop::espn_wbb_team_box_score(season = season)
+  wbb_player_box <- wehoop::espn_wbb_player_box_score(season = season)
+  
+  # Define list of data frames to save
+  data_list <- list(
+    wbb_pbp = wbb_pbp,
+    wbb_schedule = wbb_schedule,
+    wbb_team_box = wbb_team_box,
+    wbb_player_box = wbb_player_box
+  )
+  
+  # Loop through and write each data frame to a CSV
+  walk(names(data_list), function(name) {
+    df <- data_list[[name]]
+    file_name <- paste0(path, name, "_", season, ".csv")
+    
+    if (nrow(df) > 0) {
+      message(paste("Writing", name, "to:", file_name))
+      write_csv(df, file_name)
+    } else {
+      message(paste("Skipping write for", name, "in season", season, ": Data frame is empty."))
+    }
+  })
+} # <--- **MISSING CLOSING BRACE WAS HERE**
+
+# 4. Main Execution
+
+# A. Fetch all required data locally
+walk(seasons, ~fetch_and_write_data(season = .x, path = data_path))
+
+# B. Create and save the data schema file (only needs to be done once, but harmless to run daily)
+schema_file <- paste0(data_path, "llm_data_schema.txt")
+schema_content <- c(
+  "Data Schema Definitions:",
+  "wbb_pbp: Play-by-play data, includes detailed events for every game.",
+  "wbb_schedule: Game-level schedule information (teams, scores, links).",
+  "wbb_team_box: Team-level box scores (stats summaries by team per game).",
+  "wbb_player_box: Player-level box scores (stats summaries by player per game)."
+)
+writeLines(schema_content, schema_file)
+message(paste("Wrote schema to:", schema_file))
+
+# C. Upload the filtered data (current season and schema) to Google Sheets
+if (!is.null(google_sheet_id) && google_sheet_id != "") {
+  upload_to_sheets(google_sheet_id, data_path)
+} else {
+  message("WARNING: GOOGLE_SHEET_ID environment variable is not set. Sheets upload skipped.")
+}
+
+message("--- Data update process completed successfully ---")
