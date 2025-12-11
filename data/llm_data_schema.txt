@@ -1,12 +1,12 @@
 # DATA SCHEMA AND CONTEXT FOR WBB BOX SCORES
-Updated on: 2025-12-10
+Updated on: 2025-12-11
 
 ## General Context
 * **Seasons Included:** 2024, 2025, 2026
 * **Primary Team:** Arkansas Razorbacks
 * **Data Source:** wehoop (NCAA functionality)
 * **Google Sheet ID:** 1QNTkUqUm-gXwhqLKoOtj3x8fdw-aV06InXtP4VoGaTI
-* **Google Sheet Tab Name:** llm_data_schema
+* **Google Sheet Name:** NCAA WBB Stats
 
 ## Key Columns Dictionary
 * **team_display_name / team_name:** The school name.
