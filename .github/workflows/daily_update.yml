@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      # This inherits the secrets you just created
+    # The secrets line must be aligned with 'permissions' (4 spaces from 'update-data:')
     secrets: inherit 
 
     steps:
