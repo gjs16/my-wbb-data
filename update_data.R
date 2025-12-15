@@ -11,67 +11,63 @@ library(googlesheets4)
 library(googledrive)
 
 # 2. Configuration
-# We still fetch all seasons locally, but only upload 2026 daily
-seasons <- c(2024, 2025, 2026) 
+seasons <- c(2024, 2025, 2026)
 current_season <- 2026
+historic_seasons <- c(2024, 2025)
 data_path <- "./data/"
-google_sheet_id <- Sys.getenv("GOOGLE_SHEET_ID") # This is the ID for the CURRENT sheet
+
+# IDs for the two Google Sheets (Read from GitHub Actions Environment)
+google_sheet_id_current <- Sys.getenv("GOOGLE_SHEET_ID_CURRENT") # For 2026 and schema
+google_sheet_id_historic <- Sys.getenv("GOOGLE_SHEET_ID_HISTORIC") # For 2024, 2025
 
 # Ensure the output directory exists
 if (!dir.exists(data_path)) {
   dir.create(data_path, recursive = TRUE)
 }
 
-# --- FUNCTION TO UPLOAD ALL LOCAL CSV/TXT FILES TO A SINGLE GOOGLE SHEET ---
-upload_to_sheets <- function(sheet_id, local_path) {
-  message("--- Starting Google Sheets Upload ---")
-  
+# --- AUTHENTICATION CHECK ---
+auth_sheets <- function() {
   if (file.exists("gcs_auth.json")) {
     gs4_auth(path = "gcs_auth.json")
     message("Google Sheets authenticated via Service Account.")
+    return(TRUE)
   } else {
     message("ERROR: gcs_auth.json not found. Sheets upload skipped.")
-    return(NULL)
+    return(FALSE)
   }
+}
 
-  # List all uncompressed files created in the data_path
+# --- FUNCTION TO UPLOAD DAILY DATA (CURRENT SEASON + SCHEMA) ---
+upload_current_data <- function(sheet_id, local_path) {
+  message(paste("--- Starting Daily Upload to CURRENT Sheet ID:", sheet_id, "---"))
+  
+  if (!auth_sheets()) return(NULL)
+  
+  # List all files, keeping only current season data AND the schema file
   all_files <- list.files(
     path = local_path, 
     pattern = "\\.csv$|\\.txt$", 
     full.names = TRUE
   )
   
-  # CRITICAL FILTER: Only upload 2026 data and the schema on daily runs.
+  # Filter for the current season files and the schema file
   files_to_upload <- all_files %>% 
     str_subset(paste0("_", current_season, "\\.csv$|llm_data_schema\\.txt$"))
 
-  message(paste("Filtered files for daily upload (current season/schema only):", length(files_to_upload)))
-
-  # Check if the target Google Sheet exists and has permissions
-  tryCatch({
-    drive_get(id = sheet_id)
-  }, error = function(e) {
-    message(paste("ERROR: Cannot access Google Sheet ID:", sheet_id))
-    message("Ensure the Service Account has 'Editor' access to the sheet.")
-    return(NULL)
-  })
+  message(paste("Filtered files for daily upload:", length(files_to_upload)))
 
   # Loop through filtered files and upload/overwrite each one to its own tab
   walk(files_to_upload, ~{
     file_name <- basename(.x)
-    sheet_name <- str_replace_all(file_name, "\\.csv$|\\.txt$", "") 
+    sheet_name <- str_replace_all(file_name, "\\.csv$|\\.txt$", "")
     
     message(paste("Uploading/Overwriting Tab:", sheet_name))
     
     if (grepl("\\.txt$", file_name)) {
       data_to_upload <- readLines(.x) %>% as_tibble() %>% rename(Schema_Content = value)
-      Sys.sleep(1) # Small pause for the small schema file
+      Sys.sleep(1) 
     } else {
-      # Use read_csv and ensure consistent column names (not strictly needed but good practice)
       data_to_upload <- read_csv(.x, show_col_types = FALSE)
-      # FIX: Apply a simpler column name conversion if necessary, though wehoop is usually fine.
-      
-      # FIX FOR 503 ERROR: Pause before writing large files to prevent API rate limiting
       message("Pausing for 7 seconds to respect Google Sheets API limits...")
       Sys.sleep(7) 
     }
@@ -85,63 +81,47 @@ upload_to_sheets <- function(sheet_id, local_path) {
     })
   })
 }
-# --- END UPLOAD FUNCTION ---
+# --- END CURRENT UPLOAD FUNCTION ---
+
+# --- FUNCTION TO UPLOAD HISTORIC DATA (MANUAL/INFREQUENT USE ONLY) ---
+# NOTE: This is NOT called in the daily workflow. Run this manually for setup.
+upload_historic_data <- function(sheet_id, local_path, seasons_list) {
+  message(paste("--- Starting HISTORIC Upload to HISTORIC Sheet ID:", sheet_id, "---"))
+  
+  if (!auth_sheets()) return(NULL)
+  
+  # Filter to ONLY historic data (2024, 2025)
+  historic_files <- list.files(
+    path = local_path,
+    pattern = paste0("(", paste(seasons_list, collapse = "|"), ")", "\\.csv$"),
+    full.names = TRUE
+  )
+  
+  message(paste("Files for HISTORIC upload:", length(historic_files)))
+  
+  # Loop through files and upload to the historic sheet
+  walk(historic_files, ~{
+    file_name <- basename(.x)
+    sheet_name <- str_replace_all(file_name, "\\.csv$", "")
+    message(paste("Uploading/Overwriting Historic Tab:", sheet_name))
+    
+    data_to_upload <- read_csv(.x, show_col_types = FALSE)
+    Sys.sleep(7) # Respect API limits
+    
+    tryCatch({
+      sheet_write(data_to_upload, ss = sheet_id, sheet = sheet_name)
+      message(paste("SUCCESS: Wrote", file_name, "to historic tab", sheet_name))
+    }, error = function(e) {
+      message(paste("ERROR writing to sheet:", sheet_name, e))
+    })
+  })
+}
+# --- END HISTORIC UPLOAD FUNCTION ---
 
 
 # 3. Define the Fetch & Write Function (Uncompressed files for all seasons)
 fetch_and_write_data <- function(season, path) {
   message(paste("--- Fetching data for season:", season, "---"))
   
-  # Fetch data using wehoop functions
-  wbb_pbp <- wehoop::load_wbb_pbp(season = season)
-  wbb_schedule <- wehoop::espn_wbb_schedule(season = season)
-  wbb_team_box <- wehoop::espn_wbb_team_box_score(season = season)
-  wbb_player_box <- wehoop::espn_wbb_player_box_score(season = season)
-  
-  # Define list of data frames to save
-  data_list <- list(
-    wbb_pbp = wbb_pbp,
-    wbb_schedule = wbb_schedule,
-    wbb_team_box = wbb_team_box,
-    wbb_player_box = wbb_player_box
-  )
-  
-  # Loop through and write each data frame to a CSV
-  walk(names(data_list), function(name) {
-    df <- data_list[[name]]
-    file_name <- paste0(path, name, "_", season, ".csv")
-    
-    if (nrow(df) > 0) {
-      message(paste("Writing", name, "to:", file_name))
-      write_csv(df, file_name)
-    } else {
-      message(paste("Skipping write for", name, "in season", season, ": Data frame is empty."))
-    }
-  })
-} # <--- **MISSING CLOSING BRACE WAS HERE**
-
-# 4. Main Execution
-
-# A. Fetch all required data locally
-walk(seasons, ~fetch_and_write_data(season = .x, path = data_path))
-
-# B. Create and save the data schema file (only needs to be done once, but harmless to run daily)
-schema_file <- paste0(data_path, "llm_data_schema.txt")
-schema_content <- c(
-  "Data Schema Definitions:",
-  "wbb_pbp: Play-by-play data, includes detailed events for every game.",
-  "wbb_schedule: Game-level schedule information (teams, scores, links).",
-  "wbb_team_box: Team-level box scores (stats summaries by team per game).",
-  "wbb_player_box: Player-level box scores (stats summaries by player per game)."
-)
-writeLines(schema_content, schema_file)
-message(paste("Wrote schema to:", schema_file))
-
-# C. Upload the filtered data (current season and schema) to Google Sheets
-if (!is.null(google_sheet_id) && google_sheet_id != "") {
-  upload_to_sheets(google_sheet_id, data_path)
-} else {
-  message("WARNING: GOOGLE_SHEET_ID environment variable is not set. Sheets upload skipped.")
-}
-
-message("--- Data update process completed successfully ---")
+  # FIX: Corrected function name from espn_wbb_schedule to load_wbb_schedule
+  wbb_pbp <- wehoop::load_wbb
