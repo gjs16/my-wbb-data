@@ -11,9 +11,7 @@ jobs:
     permissions:
       # This is critical for the auto-commit action to be able to push changes
       contents: write
-    # The 'secrets: inherit' line was removed here as it is not valid for a standalone job.
-    # Secrets are accessed directly in the steps below.
-
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,16 +33,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libcurl4-openssl-dev libssl-dev libxml2-dev
 
-      # 2. INSTALL: Install googlesheets4 and googledrive packages
+      # 2. INSTALL: Install required R packages
       - name: Install R packages
         run: |
           Rscript -e 'install.packages("remotes")'
           Rscript -e 'remotes::install_cran(c("tidyverse", "wehoop", "janitor", "googlesheets4", "googledrive"))'
-      
-      # 3. RUN: Executes the R script and passes the Sheet ID as an environment variable
+          
+      # 3. RUN: Executes the R script and passes BOTH Sheet IDs as environment variables
       - name: Run update script and Sheets Sync
         env:
-          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SHEET_ID_CURRENT: ${{ secrets.GOOGLE_SHEET_ID_CURRENT }}
+          GOOGLE_SHEET_ID_HISTORIC: ${{ secrets.GOOGLE_SHEET_ID_HISTORIC }} # Passed to allow full configuration in R
         run: Rscript update_data.R
 
       # 4. COMMIT: Commits the updated uncompressed files back to the GitHub repo
@@ -55,5 +54,4 @@ jobs:
           file_pattern: data/*
           branch: ${{ github.ref_name }}
           pull_strategy: rebase
-          # FIX: This explicitly passes the token, required for scheduled pushes.
           token: ${{ secrets.GITHUB_TOKEN }}
