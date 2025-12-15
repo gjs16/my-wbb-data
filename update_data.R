@@ -84,7 +84,6 @@ upload_current_data <- function(sheet_id, local_path) {
 # --- END CURRENT UPLOAD FUNCTION ---
 
 # --- FUNCTION TO UPLOAD HISTORIC DATA (MANUAL/INFREQUENT USE ONLY) ---
-# NOTE: This is NOT called in the daily workflow. Run this manually for setup.
 upload_historic_data <- function(sheet_id, local_path, seasons_list) {
   message(paste("--- Starting HISTORIC Upload to HISTORIC Sheet ID:", sheet_id, "---"))
   
@@ -124,4 +123,11 @@ fetch_and_write_data <- function(season, path) {
   message(paste("--- Fetching data for season:", season, "---"))
   
   # FIX: Corrected function name from espn_wbb_schedule to load_wbb_schedule
-  wbb_pbp <- wehoop::load_wbb
+  wbb_pbp <- wehoop::load_wbb_pbp(season = season)
+  wbb_schedule <- wehoop::load_wbb_schedule(season = season) 
+  wbb_team_box <- wehoop::espn_wbb_team_box_score(season = season)
+  wbb_player_box <- wehoop::espn_wbb_player_box_score(season = season)
+  
+  # Define list of data frames to save
+  data_list <- list(
+    wbb_pbp
