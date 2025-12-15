@@ -130,4 +130,60 @@ fetch_and_write_data <- function(season, path) {
   
   # Define list of data frames to save
   data_list <- list(
-    wbb_pbp
+    wbb_pbp = wbb_pbp,
+    wbb_schedule = wbb_schedule,
+    wbb_team_box = wbb_team_box,
+    wbb_player_box = wbb_player_box
+  )
+  
+  # Loop through and write each data frame to a CSV
+  walk(names(data_list), function(name) {
+    df <- data_list[[name]]
+    file_name <- paste0(path, name, "_", season, ".csv")
+    
+    if (nrow(df) > 0) {
+      message(paste("Writing", name, "to:", file_name))
+      write_csv(df, file_name)
+    } else {
+      message(paste("Skipping write for", name, "in season", season, ": Data frame is empty."))
+    }
+  })
+}
+
+# 4. Main Execution
+
+# A. Fetch all required data locally
+walk(seasons, ~fetch_and_write_data(season = .x, path = data_path))
+
+# B. Create and save the data schema file (CRITICAL CONTEXT FOR LLM)
+schema_file <- paste0(data_path, "llm_data_schema.txt")
+schema_content <- c(
+  "Data Schema Definitions:",
+  "wbb_pbp: Play-by-play data, includes detailed events for every game.",
+  "wbb_schedule: Game-level schedule information (teams, scores, links).",
+  "wbb_team_box: Team-level box scores (stats summaries by team per game).",
+  "wbb_player_box: Player-level box scores (stats summaries by player per game).",
+  "",
+  "LLM ACCESS NOTE:",
+  "1. ALWAYS check the 'NCAA WBB Current Stats' sheet for 2026 data and the schema.",
+  "2. ALWAYS check the 'NCAA WBB Historic Stats' sheet for 2024 and 2025 data."
+)
+writeLines(schema_content, schema_file)
+message(paste("Wrote schema to:", schema_file))
+
+# C. Upload the filtered data (current season and schema) to the CURRENT Google Sheet
+if (!is.null(google_sheet_id_current) && google_sheet_id_current != "") {
+  upload_current_data(google_sheet_id_current, data_path)
+} else {
+  message("WARNING: GOOGLE_SHEET_ID_CURRENT environment variable is not set. Current Sheets upload skipped.")
+}
+
+# D. OPTIONAL/MANUAL: Upload the HISTORIC data to the HISTORIC Google Sheet.
+#    This block is UNCOMMENTED FOR THIS TEMPORARY RUN ONLY.
+if (!is.null(google_sheet_id_historic) && google_sheet_id_historic != "") {
+  upload_historic_data(google_sheet_id_historic, data_path, historic_seasons)
+} else {
+  message("WARNING: GOOGLE_SHEET_ID_HISTORIC environment variable is not set. Historic Sheets upload skipped.")
+}
+
+message("--- Data update process completed successfully ---")
