@@ -1,4 +1,4 @@
-# update_data.R (Temporary Script to Upload Historic Data - Final Fix)
+# update_data.R (Final Permanent Script - Single Sheet, Cell Limit Proof)
 
 # 1. Load Required Packages
 library(wehoop)
@@ -6,6 +6,7 @@ library(dplyr)
 library(readr)
 library(purrr)
 library(stringr)
+library(lubridate) # Needed for data type conversion fix
 # Packages for Google Sheets integration
 library(googlesheets4)
 library(googledrive)
@@ -13,16 +14,26 @@ library(googledrive)
 # 2. Configuration
 seasons <- c(2024, 2025, 2026)
 current_season <- 2026
-historic_seasons <- c(2024, 2025)
 data_path <- "./data/"
 
-# IDs for the two Google Sheets (Read from GitHub Actions Environment)
-google_sheet_id_current <- Sys.getenv("GOOGLE_SHEET_ID_CURRENT") # For 2026 and schema
-google_sheet_id_historic <- Sys.getenv("GOOGLE_SHEET_ID_HISTORIC") # For 2024, 2025
+# CRITICAL: Use only ONE Sheet ID for the consolidated analysis hub
+google_sheet_id <- Sys.getenv("GOOGLE_SHEET_ID") 
+
+# CRITICAL EXCLUSION LIST: Files too large for Google Sheets (10M cell limit)
+EXCLUDE_PREFIXES <- c("wbb_pbp") 
 
 # Ensure the output directory exists
 if (!dir.exists(data_path)) {
   dir.create(data_path, recursive = TRUE)
+}
+
+# --- DATA CLEANUP AND CONVERSION FUNCTION (FIXING hms/difftime ERROR) ---
+clean_data_for_sheets <- function(df) {
+  df <- df %>%
+    # FIX: Convert hms/difftime columns (common in schedule/pbp) to characters
+    mutate(across(where(inherits, what = "hms"), as.character)) %>%
+    mutate(across(where(inherits, what = "difftime"), as.character)) 
+  return(df)
 }
 
 # --- AUTHENTICATION CHECK ---
@@ -37,9 +48,9 @@ auth_sheets <- function() {
   }
 }
 
-# --- FUNCTION TO UPLOAD DAILY DATA (CURRENT SEASON + SCHEMA) ---
-upload_current_data <- function(sheet_id, local_path) {
-  message(paste("--- Starting Daily Upload to CURRENT Sheet ID:", sheet_id, "---"))
+# --- FUNCTION TO UPLOAD ALL FILTERED DATA TO ONE SHEET ---
+upload_to_sheets <- function(sheet_id, local_path, current_season_only = FALSE) {
+  message(paste("--- Starting Google Sheets Upload to Sheet ID:", sheet_id, "---"))
   
   if (!auth_sheets()) return(NULL)
   
@@ -50,13 +61,19 @@ upload_current_data <- function(sheet_id, local_path) {
   )
   
   files_to_upload <- all_files %>% 
-    str_subset(paste0("_", current_season, "\\.csv$|llm_data_schema\\.txt$"))
+    # 1. Filter out the massive, excluded files (like wbb_pbp)
+    str_subset(paste0("(", paste(EXCLUDE_PREFIXES, collapse = "|"), ")"), negate = TRUE) %>%
+    # 2. Keep only current season data if running daily, otherwise keep all seasons
+    {if (current_season_only) str_subset(., paste0("_", current_season, "\\.csv$|llm_data_schema\\.txt$|llm_grounding\\.txt$")) else .}
 
-  message(paste("Filtered files for daily upload:", length(files_to_upload)))
+  message(paste("Filtered files for upload:", length(files_to_upload)))
 
   walk(files_to_upload, ~{
     file_name <- basename(.x)
-    sheet_name <- str_replace_all(file_name, "\\.csv$|\\.txt$", "")
+    
+    # RENAME TABS for LLM simplicity: remove 'wbb_' prefix if it exists
+    sheet_name <- str_replace_all(file_name, "wbb_", "") %>%
+                  str_replace_all(., "\\.csv$|\\.txt$", "")
     
     message(paste("Uploading/Overwriting Tab:", sheet_name))
     
@@ -64,7 +81,8 @@ upload_current_data <- function(sheet_id, local_path) {
       data_to_upload <- readLines(.x) %>% as_tibble() %>% rename(Schema_Content = value)
       Sys.sleep(1) 
     } else {
-      data_to_upload <- read_csv(.x, show_col_types = FALSE)
+      # Read CSV and clean data types before upload
+      data_to_upload <- read_csv(.x, show_col_types = FALSE) %>% clean_data_for_sheets()
       message("Pausing for 7 seconds to respect Google Sheets API limits...")
       Sys.sleep(7) 
     }
@@ -73,43 +91,11 @@ upload_current_data <- function(sheet_id, local_path) {
       sheet_write(data_to_upload, ss = sheet_id, sheet = sheet_name)
       message(paste("SUCCESS: Wrote", file_name, "to tab", sheet_name))
     }, error = function(e) {
-      message(paste("ERROR writing to current sheet:", sheet_name, e))
+      message(paste("FATAL ERROR writing to sheet:", sheet_name, e))
     })
   })
 }
-# --- END CURRENT UPLOAD FUNCTION ---
-
-# --- FUNCTION TO UPLOAD HISTORIC DATA (MANUAL/INFREQUENT USE ONLY) ---
-upload_historic_data <- function(sheet_id, local_path, seasons_list) {
-  message(paste("--- Starting HISTORIC Upload to HISTORIC Sheet ID:", sheet_id, "---"))
-  
-  if (!auth_sheets()) return(NULL)
-  
-  historic_files <- list.files(
-    path = local_path,
-    pattern = paste0("(", paste(seasons_list, collapse = "|"), ")", "\\.csv$"),
-    full.names = TRUE
-  )
-  
-  message(paste("Files for HISTORIC upload:", length(historic_files)))
-  
-  walk(historic_files, ~{
-    file_name <- basename(.x)
-    sheet_name <- str_replace_all(file_name, "\\.csv$", "")
-    message(paste("Uploading/Overwriting Historic Tab:", sheet_name))
-    
-    data_to_upload <- read_csv(.x, show_col_types = FALSE)
-    Sys.sleep(7) # Respect API limits
-    
-    tryCatch({
-      sheet_write(data_to_upload, ss = sheet_id, sheet = sheet_name)
-      message(paste("SUCCESS: Wrote", file_name, "to historic tab", sheet_name))
-    }, error = function(e) {
-      message(paste("ERROR writing to historic sheet:", sheet_name, e))
-    })
-  })
-}
-# --- END HISTORIC UPLOAD FUNCTION ---
+# --- END UPLOAD FUNCTION ---
 
 
 # 3. Define the Fetch & Write Function (Uncompressed files for all seasons)
@@ -131,6 +117,7 @@ fetch_and_write_data <- function(season, path) {
     wbb_player_box = wbb_player_box
   )
   
+  # Fail-safe check
   if (nrow(wbb_schedule) == 0 && season >= current_season) {
     stop("CRITICAL FAILURE: Schedule data missing for current season. Halting process.")
   }
@@ -153,35 +140,49 @@ fetch_and_write_data <- function(season, path) {
 # A. Fetch all required data locally
 walk(seasons, ~fetch_and_write_data(season = .x, path = data_path))
 
-# B. Create and save the data schema file (CRITICAL CONTEXT FOR LLM)
+# B. Create and save the data schema and grounding files
 schema_file <- paste0(data_path, "llm_data_schema.txt")
 schema_content <- c(
   "Data Schema Definitions:",
-  "wbb_pbp: Play-by-play data, includes detailed events for every game.",
-  "wbb_schedule: Game-level schedule information (teams, scores, links).",
-  "wbb_team_box: Team-level box scores (stats summaries by team per game).",
-  "wbb_player_box: Player-level box scores (stats summaries by player per game).",
+  "schedule_YYYY: Game-level schedule information (teams, scores, links).",
+  "team_box_YYYY: Team-level box scores (stats summaries by team per game).",
+  "player_box_YYYY: Player-level box scores (stats summaries by player per game).",
+  "NOTE: Play-by-play (wbb_pbp) data is TOO large for Sheets; check the GitHub repository for raw CSV files.",
   "",
-  "LLM ACCESS NOTE:",
-  "1. ALWAYS check the 'NCAA WBB Current Stats' sheet for 2026 data and the schema.",
-  "2. ALWAYS check the 'NCAA WBB Historic Stats' sheet for 2024 and 2025 data."
+  "LLM ACCESS NOTE: ALL core analysis data for 2024, 2025, and 2026 is consolidated in this ONE sheet (NCAA WBB Stats).",
+  "Review the 'llm_grounding' tab first for strategic advice."
 )
 writeLines(schema_content, schema_file)
 message(paste("Wrote schema to:", schema_file))
 
-# C. Upload the filtered data (current season and schema) to the CURRENT Google Sheet
-if (!is.null(google_sheet_id_current) && google_sheet_id_current != "") {
-  upload_current_data(google_sheet_id_current, data_path)
-} else {
-  message("WARNING: GOOGLE_SHEET_ID_CURRENT environment variable is not set. Current Sheets upload skipped.")
-}
 
-# D. OPTIONAL/MANUAL: Upload the HISTORIC data to the HISTORIC Google Sheet.
-#    ***THIS BLOCK IS UNCOMMENTED FOR THIS SINGLE RUN ONLY***
-if (!is.null(google_sheet_id_historic) && google_sheet_id_historic != "") {
-  upload_historic_data(google_sheet_id_historic, data_path, historic_seasons)
+# --- New LLM Grounding File ---
+grounding_file <- paste0(data_path, "llm_grounding.txt")
+grounding_content <- c(
+  "# LLM PROJECT GOAL AND ANALYSIS GUIDE",
+  "## Project Goal",
+  "To enable fast, cross-seasonal analysis of NCAA Women's Basketball statistics to identify trends, performance shifts, and opportunities for arbitrage in betting markets (where permitted) or advanced scouting.",
+  "",
+  "## Data Layer Strategy (Read Before Analyzing)",
+  "1. **Primary Layer (Google Sheet):** Contains all tables needed for 95% of queries (YoY comparison, calculating team averages, finding top players). All tabs are named clearly (e.g., 'player_box_2026').",
+  "2. **Deep Dive Layer (GitHub/Drive):** Contains the highly granular, massive Play-by-Play files ('wbb_pbp_YYYY.csv'). These files are intentionally EXCLUDED from this Google Sheet to avoid the 10 million cell limit.",
+  "",
+  "## Query Handling Rules",
+  "* **A. Cross-Analysis:** Queries involving multiple seasons (e.g., '2024 vs 2026') MUST reference the appropriate tabs (e.g., 'player_box_2024' and 'player_box_2026') within this SINGLE sheet.",
+  "* **B. Quick Queries (In-Sheet):** Use standard sheet analysis for calculating averages, totals, and finding leaders in the 'player_box' and 'team_box' tables.",
+  "* **C. Deep Dive Queries (External CSV):** If the query asks for **quarter/minute specific data** or **event-level granularity** (e.g., 'shots taken under 5 seconds', 'turnovers in the 3rd quarter'), the LLM MUST request access to the external 'wbb_pbp_YYYY.csv' files from the linked GitHub repository/Drive and process them separately. Do not attempt PBP analysis on the sheet data."
+)
+writeLines(grounding_content, grounding_file)
+message(paste("Wrote LLM Grounding document to:", grounding_file))
+# -----------------------------
+
+
+# C. Upload the ALL filtered data (All seasons + schema + grounding) to the SINGLE Google Sheet
+if (!is.null(google_sheet_id) && google_sheet_id != "") {
+  # Perform a full initial sync (current_season_only = FALSE)
+  upload_to_sheets(google_sheet_id, data_path, current_season_only = FALSE) 
 } else {
-  message("WARNING: GOOGLE_SHEET_ID_HISTORIC environment variable is not set. Historic Sheets upload skipped.")
+  message("WARNING: GOOGLE_SHEET_ID environment variable is not set. Sheets upload skipped.")
 }
 
 message("--- Data update process completed successfully ---")
