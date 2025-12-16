@@ -1,4 +1,4 @@
-# update_data.R (DEBUG VERSION for final historic upload attempt)
+# update_data.R
 
 # 1. Load Required Packages
 library(wehoop)
@@ -73,7 +73,7 @@ upload_current_data <- function(sheet_id, local_path) {
       sheet_write(data_to_upload, ss = sheet_id, sheet = sheet_name)
       message(paste("SUCCESS: Wrote", file_name, "to tab", sheet_name))
     }, error = function(e) {
-      message(paste("FATAL ERROR writing to sheet:", sheet_name, e))
+      message(paste("ERROR writing to current sheet:", sheet_name, e))
     })
   })
 }
@@ -93,13 +93,10 @@ upload_historic_data <- function(sheet_id, local_path, seasons_list) {
   
   message(paste("Files for HISTORIC upload:", length(historic_files)))
   
-  # DEBUG LOGGING: Before loop
-  message("--- DEBUG: Starting loop to write all historic files ---")
-  
   walk(historic_files, ~{
     file_name <- basename(.x)
     sheet_name <- str_replace_all(file_name, "\\.csv$", "")
-    message(paste("ATTEMPTING WRITE:", sheet_name))
+    message(paste("Uploading/Overwriting Historic Tab:", sheet_name))
     
     data_to_upload <- read_csv(.x, show_col_types = FALSE)
     Sys.sleep(7) # Respect API limits
@@ -108,11 +105,9 @@ upload_historic_data <- function(sheet_id, local_path, seasons_list) {
       sheet_write(data_to_upload, ss = sheet_id, sheet = sheet_name)
       message(paste("SUCCESS: Wrote", file_name, "to historic tab", sheet_name))
     }, error = function(e) {
-      message(paste("FATAL ERROR writing historic sheet:", sheet_name, e))
+      message(paste("ERROR writing to historic sheet:", sheet_name, e))
     })
   })
-  # DEBUG LOGGING: After loop
-  message("--- DEBUG: Completed loop for historic files. Check logs for FATAL ERRORS. ---")
 }
 # --- END HISTORIC UPLOAD FUNCTION ---
 
@@ -121,11 +116,14 @@ upload_historic_data <- function(sheet_id, local_path, seasons_list) {
 fetch_and_write_data <- function(season, path) {
   message(paste("--- Fetching data for season:", season, "---"))
   
-  wbb_pbp <- wehoop::load_wbb_pbp(season = season)
+  # FIX: Added timeout parameter for robustness against 504 errors.
+  # The default is 300 seconds (5 min); 600 seconds (10 min) provides more buffer.
+  wbb_pbp <- wehoop::load_wbb_pbp(season = season, timeout = 600)
   wbb_schedule <- wehoop::load_wbb_schedule(season = season) 
   wbb_team_box <- wehoop::espn_wbb_team_box_score(season = season)
   wbb_player_box <- wehoop::espn_wbb_player_box_score(season = season)
   
+  # Define list of data frames to save
   data_list <- list(
     wbb_pbp = wbb_pbp,
     wbb_schedule = wbb_schedule,
@@ -133,6 +131,12 @@ fetch_and_write_data <- function(season, path) {
     wbb_player_box = wbb_player_box
   )
   
+  # Check if data fetching failed and stop execution early if critical data is missing
+  if (nrow(wbb_schedule) == 0 && season >= current_season) {
+    stop("CRITICAL FAILURE: Schedule data missing for current season. Halting process.")
+  }
+
+  # Loop through and write each data frame to a CSV
   walk(names(data_list), function(name) {
     df <- data_list[[name]]
     file_name <- paste0(path, name, "_", season, ".csv")
@@ -175,8 +179,10 @@ if (!is.null(google_sheet_id_current) && google_sheet_id_current != "") {
 }
 
 # D. OPTIONAL/MANUAL: Upload the HISTORIC data to the HISTORIC Google Sheet.
+#    This step is COMMENTED OUT for the daily workflow to prevent unnecessary writes.
+#
 if (!is.null(google_sheet_id_historic) && google_sheet_id_historic != "") {
-  upload_historic_data(google_sheet_id_historic, data_path, historic_seasons) 
+  # upload_historic_data(google_sheet_id_historic, data_path, historic_seasons) # LINE REMAINS COMMENTED OUT
 } else {
   message("WARNING: GOOGLE_SHEET_ID_HISTORIC environment variable is not set. Historic Sheets upload skipped.")
 }
