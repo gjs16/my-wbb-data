@@ -1,85 +1,184 @@
-# Rscript update_data.R
+# update_data.R (DEBUG VERSION for final historic upload attempt)
 
-# --- Load Required Libraries ---
-library(dplyr)
+# 1. Load Required Packages
 library(wehoop)
-library(purrr)
+library(dplyr)
 library(readr)
+library(purrr)
+library(stringr)
+# Packages for Google Sheets integration
+library(googlesheets4)
 library(googledrive)
-library(cli) 
 
-# Define the target season and file path
-TARGET_SEASON <- 2024
-DATA_PATH <- "wbb_data.csv" 
+# 2. Configuration
+seasons <- c(2024, 2025, 2026)
+current_season <- 2026
+historic_seasons <- c(2024, 2025)
+data_path <- "./data/"
 
-# --- Main Data Fetching Function ---
-fetch_and_write_data <- function(season, path) {
-    
-    cli::cli_alert_info("Starting robust data fetch for season: {season}")
-    
-    # --- STEP 1: Get all Game IDs for the Season (Potential Failure Point) ---
-    cli::cli_alert_info("1/2: Fetching game IDs using espn_wbb_scoreboard()...")
-    
-    # Use tryCatch to capture API errors cleanly and return NULL on failure
-    scoreboard_data <- tryCatch(
-        wehoop::espn_wbb_scoreboard(season = season),
-        error = function(e) {
-            cli::cli_alert_danger("API CALL FAILED: {e$message}")
-            return(NULL)
-        }
-    )
-    
-    # CRITICAL CHECK: Check if the result is valid (a data frame with rows).
-    if (is.null(scoreboard_data) || !is.data.frame(scoreboard_data) || nrow(scoreboard_data) == 0) {
-        cli::cli_alert_warning("No games or invalid result returned. Skipping entire job due to external failure.")
-        return(invisible(NULL))
-    }
-    
-    game_ids <- scoreboard_data$game_id
-    cli::cli_alert_success("Found {length(game_ids)} game IDs.")
-    
-    
-    # --- STEP 2: Fetch All Game Data and Extract Team Box Scores ---
-    cli::cli_alert_info("2/2: Fetching detailed game data using espn_wbb_game_all()...")
-    
-    # map runs sequentially, relying on wehoop's internal rate limiting.
-    all_game_data <- purrr::map(game_ids, 
-                                ~wehoop::espn_wbb_game_all(game_id = .x), 
-                                .progress = TRUE) %>%
-        purrr::compact()
-    
-    # Extract ONLY the Team Box score data and bind rows together
-    new_team_data <- purrr::map_dfr(all_game_data, ~.x$Team)
-    
-    if (nrow(new_team_data) == 0) {
-        cli::cli_alert_warning("No team box score data returned. Skipping write.")
-        return(invisible(NULL))
-    }
-    
-    cli::cli_alert_success("Successfully fetched {nrow(new_team_data)} rows of box score data.")
-    
-    
-    # --- STEP 3: Write to File (Append/Overwrite Logic) ---
-    
-    if (file.exists(path)) {
-        cli::cli_alert_info("File exists. Reading, combining, and overwriting data.")
-        
-        existing_data <- readr::read_csv(path, col_types = cols(.default = col_character()))
-        
-        combined_data <- dplyr::bind_rows(existing_data, new_team_data) %>%
-            dplyr::distinct() 
-        
-        readr::write_csv(combined_data, path)
-        final_row_count <- nrow(combined_data)
-        
-    } else {
-        cli::cli_alert_info("File does not exist. Writing data to {path}.")
-        readr::write_csv(new_team_data, path)
-        final_row_count <- nrow(new_team_data)
-    }
-    
-    cli::cli_alert_success("R Script execution complete. Total rows in {path}: {final_row_count}")
+# IDs for the two Google Sheets (Read from GitHub Actions Environment)
+google_sheet_id_current <- Sys.getenv("GOOGLE_SHEET_ID_CURRENT") # For 2026 and schema
+google_sheet_id_historic <- Sys.getenv("GOOGLE_SHEET_ID_HISTORIC") # For 2024, 2025
+
+# Ensure the output directory exists
+if (!dir.exists(data_path)) {
+  dir.create(data_path, recursive = TRUE)
 }
 
-# --- Execution ---
-fetch_and_write_data(season = TARGET_SEASON, path = DATA_PATH)
+# --- AUTHENTICATION CHECK ---
+auth_sheets <- function() {
+  if (file.exists("gcs_auth.json")) {
+    gs4_auth(path = "gcs_auth.json")
+    message("Google Sheets authenticated via Service Account.")
+    return(TRUE)
+  } else {
+    message("ERROR: gcs_auth.json not found. Sheets upload skipped.")
+    return(FALSE)
+  }
+}
+
+# --- FUNCTION TO UPLOAD DAILY DATA (CURRENT SEASON + SCHEMA) ---
+upload_current_data <- function(sheet_id, local_path) {
+  message(paste("--- Starting Daily Upload to CURRENT Sheet ID:", sheet_id, "---"))
+  
+  if (!auth_sheets()) return(NULL)
+  
+  all_files <- list.files(
+    path = local_path, 
+    pattern = "\\.csv$|\\.txt$", 
+    full.names = TRUE
+  )
+  
+  files_to_upload <- all_files %>% 
+    str_subset(paste0("_", current_season, "\\.csv$|llm_data_schema\\.txt$"))
+
+  message(paste("Filtered files for daily upload:", length(files_to_upload)))
+
+  walk(files_to_upload, ~{
+    file_name <- basename(.x)
+    sheet_name <- str_replace_all(file_name, "\\.csv$|\\.txt$", "")
+    
+    message(paste("Uploading/Overwriting Tab:", sheet_name))
+    
+    if (grepl("\\.txt$", file_name)) {
+      data_to_upload <- readLines(.x) %>% as_tibble() %>% rename(Schema_Content = value)
+      Sys.sleep(1) 
+    } else {
+      data_to_upload <- read_csv(.x, show_col_types = FALSE)
+      message("Pausing for 7 seconds to respect Google Sheets API limits...")
+      Sys.sleep(7) 
+    }
+    
+    tryCatch({
+      sheet_write(data_to_upload, ss = sheet_id, sheet = sheet_name)
+      message(paste("SUCCESS: Wrote", file_name, "to tab", sheet_name))
+    }, error = function(e) {
+      message(paste("FATAL ERROR writing to sheet:", sheet_name, e))
+    })
+  })
+}
+# --- END CURRENT UPLOAD FUNCTION ---
+
+# --- FUNCTION TO UPLOAD HISTORIC DATA (MANUAL/INFREQUENT USE ONLY) ---
+upload_historic_data <- function(sheet_id, local_path, seasons_list) {
+  message(paste("--- Starting HISTORIC Upload to HISTORIC Sheet ID:", sheet_id, "---"))
+  
+  if (!auth_sheets()) return(NULL)
+  
+  historic_files <- list.files(
+    path = local_path,
+    pattern = paste0("(", paste(seasons_list, collapse = "|"), ")", "\\.csv$"),
+    full.names = TRUE
+  )
+  
+  message(paste("Files for HISTORIC upload:", length(historic_files)))
+  
+  # DEBUG LOGGING: Before loop
+  message("--- DEBUG: Starting loop to write all historic files ---")
+  
+  walk(historic_files, ~{
+    file_name <- basename(.x)
+    sheet_name <- str_replace_all(file_name, "\\.csv$", "")
+    message(paste("ATTEMPTING WRITE:", sheet_name))
+    
+    data_to_upload <- read_csv(.x, show_col_types = FALSE)
+    Sys.sleep(7) # Respect API limits
+    
+    tryCatch({
+      sheet_write(data_to_upload, ss = sheet_id, sheet = sheet_name)
+      message(paste("SUCCESS: Wrote", file_name, "to historic tab", sheet_name))
+    }, error = function(e) {
+      message(paste("FATAL ERROR writing historic sheet:", sheet_name, e))
+    })
+  })
+  # DEBUG LOGGING: After loop
+  message("--- DEBUG: Completed loop for historic files. Check logs for FATAL ERRORS. ---")
+}
+# --- END HISTORIC UPLOAD FUNCTION ---
+
+
+# 3. Define the Fetch & Write Function (Uncompressed files for all seasons)
+fetch_and_write_data <- function(season, path) {
+  message(paste("--- Fetching data for season:", season, "---"))
+  
+  wbb_pbp <- wehoop::load_wbb_pbp(season = season)
+  wbb_schedule <- wehoop::load_wbb_schedule(season = season) 
+  wbb_team_box <- wehoop::espn_wbb_team_box_score(season = season)
+  wbb_player_box <- wehoop::espn_wbb_player_box_score(season = season)
+  
+  data_list <- list(
+    wbb_pbp = wbb_pbp,
+    wbb_schedule = wbb_schedule,
+    wbb_team_box = wbb_team_box,
+    wbb_player_box = wbb_player_box
+  )
+  
+  walk(names(data_list), function(name) {
+    df <- data_list[[name]]
+    file_name <- paste0(path, name, "_", season, ".csv")
+    
+    if (nrow(df) > 0) {
+      message(paste("Writing", name, "to:", file_name))
+      write_csv(df, file_name)
+    } else {
+      message(paste("Skipping write for", name, "in season", season, ": Data frame is empty."))
+    }
+  })
+}
+
+# 4. Main Execution
+
+# A. Fetch all required data locally
+walk(seasons, ~fetch_and_write_data(season = .x, path = data_path))
+
+# B. Create and save the data schema file (CRITICAL CONTEXT FOR LLM)
+schema_file <- paste0(data_path, "llm_data_schema.txt")
+schema_content <- c(
+  "Data Schema Definitions:",
+  "wbb_pbp: Play-by-play data, includes detailed events for every game.",
+  "wbb_schedule: Game-level schedule information (teams, scores, links).",
+  "wbb_team_box: Team-level box scores (stats summaries by team per game).",
+  "wbb_player_box: Player-level box scores (stats summaries by player per game).",
+  "",
+  "LLM ACCESS NOTE:",
+  "1. ALWAYS check the 'NCAA WBB Current Stats' sheet for 2026 data and the schema.",
+  "2. ALWAYS check the 'NCAA WBB Historic Stats' sheet for 2024 and 2025 data."
+)
+writeLines(schema_content, schema_file)
+message(paste("Wrote schema to:", schema_file))
+
+# C. Upload the filtered data (current season and schema) to the CURRENT Google Sheet
+if (!is.null(google_sheet_id_current) && google_sheet_id_current != "") {
+  upload_current_data(google_sheet_id_current, data_path)
+} else {
+  message("WARNING: GOOGLE_SHEET_ID_CURRENT environment variable is not set. Current Sheets upload skipped.")
+}
+
+# D. OPTIONAL/MANUAL: Upload the HISTORIC data to the HISTORIC Google Sheet.
+if (!is.null(google_sheet_id_historic) && google_sheet_id_historic != "") {
+  upload_historic_data(google_sheet_id_historic, data_path, historic_seasons) 
+} else {
+  message("WARNING: GOOGLE_SHEET_ID_HISTORIC environment variable is not set. Historic Sheets upload skipped.")
+}
+
+message("--- Data update process completed successfully ---")
