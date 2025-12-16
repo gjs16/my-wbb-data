@@ -1,4 +1,4 @@
-# update_data.R (Temporary Script to Upload Historic Data - For ONE RUN ONLY)
+# update_data.R (Temporary Script to Upload Historic Data - Final Fix)
 
 # 1. Load Required Packages
 library(wehoop)
@@ -119,8 +119,10 @@ fetch_and_write_data <- function(season, path) {
   # API Robustness Fix: Increased timeout
   wbb_pbp <- wehoop::load_wbb_pbp(season = season, timeout = 600)
   wbb_schedule <- wehoop::load_wbb_schedule(season = season) 
-  wbb_team_box <- wehoop::espn_wbb_team_box_score(season = season)
-  wbb_player_box <- wehoop::espn_wbb_player_box_score(season = season)
+  
+  # FIX: Corrected function names for team and player box scores
+  wbb_team_box <- wehoop::load_wbb_team_box(season = season) 
+  wbb_player_box <- wehoop::load_wbb_player_box(season = season)
   
   data_list <- list(
     wbb_pbp = wbb_pbp,
